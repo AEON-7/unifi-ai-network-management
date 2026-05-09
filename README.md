@@ -4,15 +4,9 @@ A safety-first UniFi API skill and tooling package for AI agents that can inspec
 
 This package gives an AI agent a practical UniFi runbook, a deterministic API helper, owner-only shell tooling, secure `.env` handling, backup/restore commands, and break-glass controls for revoking local access quickly.
 
-Recommended repository name: `unifi-ai-network-management`.
+Repository name: `unifi-ai-network-management`.
 
-Other clear names if you want options:
-
-- `unifi-ai-network-management` - most direct and easy to understand
-- `unifi-ai-ops-toolkit` - shorter, operations-focused
-- `unifi-network-agent-toolkit` - emphasizes agent integration
-- `unifi-ai-noc` - compact, network-operations-center vibe
-- `safe-unifi-agent-tools` - strongest safety positioning
+This repo is designed to be installed as a complete package: the skill folder is copied into the agent skills directory, helper scripts are installed into the user's local bin directory, and credentials are stored in a private env file outside the repository.
 
 ## What This Does
 
@@ -89,6 +83,34 @@ unifi-restore
 ```
 
 If you do not use OpenClaw, you can still use the helper script and docs. Install the skill folder wherever your agent framework expects tool instructions.
+
+### What `setup.sh` Copies
+
+The installer copies the canonical skill directory from:
+
+```text
+./skill/unifi-api/
+```
+
+to the standard OpenClaw workspace skill path:
+
+```text
+~/.openclaw/workspace/skills/unifi-api/
+```
+
+It preserves this layout because the `SKILL.md` references `references/` and `scripts/unifi_api.py` by relative path:
+
+```text
+unifi-api/
+??? SKILL.md
+??? scripts/unifi_api.py
+??? references/
+??? agents/openai.yaml
+```
+
+For other agent frameworks, copy the entire `skill/unifi-api` directory into that framework's skills/tools directory. Do not copy only `SKILL.md`; the helper script and reference files are part of the package.
+
+See `AGENTS.md` for detailed agent-framework installation and behavior guidance.
 
 ## Environment File
 
@@ -400,6 +422,7 @@ High-impact actions require explicit user intent:
 ??? setup.sh
 ??? env.example
 ??? .env                      # intentionally empty placeholder
+??? AGENTS.md                 # installation/behavior notes for agent frameworks
 ??? scripts/
 ?   ??? unifi-api-status
 ?   ??? unifi-api-configure
