@@ -84,9 +84,9 @@ The helper also checks:
 
 Use `env.example` as the template. Never commit a real env file.
 
-## Owner Commands Are Not Agent Commands
+## Operational Commands And Agent Boundaries
 
-The repository installs owner aliases such as:
+The repository installs aliases such as:
 
 ```bash
 unifi-setup
@@ -97,9 +97,9 @@ unifi-backup
 unifi-restore
 ```
 
-These are for the human operator. They are intentionally not included as normal agent workflow commands inside `SKILL.md`.
+`unifi-setup`, `unifi-status`, and break-glass local access-control commands are owner/operator commands.
 
-An agent may mention that the owner has break-glass/revocation tooling, but it should not invoke local kill switches or restore commands unless the operator explicitly asks for that administrative action.
+`unifi-backup` and `unifi-restore` are part of safe network change management and are included in `SKILL.md`. Agents may run backups on demand or before major changes. Agents may run restore dry-runs after the user asks for rollback. Agents must ask which backup date/time to use when multiple restore points exist, summarize the dry-run, and apply only after explicit user confirmation.
 
 ## Agent Behavior Contract
 
@@ -109,11 +109,13 @@ A safe UniFi agent should:
 2. Prefer official APIs over legacy private endpoints.
 3. Use exact object identity before writes: site, name, MAC/IP/model/id.
 4. Avoid broad changes based on vague requests.
-5. Request or confirm backup before major changes.
-6. Explain intended endpoint/action before high-impact writes.
-7. Verify after every write.
-8. Never reveal API keys, passwords, cookies, CSRF tokens, or raw sensitive config.
-9. Report failures with endpoint path and HTTP status, not secrets.
+5. Run `unifi-backup` before major changes and report the backup path.
+6. For restore requests, list backup date/time folders and ask which restore point to use when multiple exist.
+7. Run restore dry-run first, then apply only after explicit confirmation.
+8. Explain intended endpoint/action before high-impact writes.
+9. Verify after every write.
+10. Never reveal API keys, passwords, cookies, CSRF tokens, or raw sensitive config.
+11. Report failures with endpoint path and HTTP status, not secrets.
 
 ## Helper Script Examples
 

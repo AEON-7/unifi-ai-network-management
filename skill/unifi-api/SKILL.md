@@ -90,17 +90,108 @@ python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py legacy-devic
 
 The helper prints JSON. Pipe to `jq` for filtering when available.
 
+The operational backup/restore tools are also part of this skill because they protect major UniFi changes:
+
+```bash
+unifi-backup    # create a secure timestamped backup before major changes or on demand
+unifi-restore   # choose a restore point and dry-run/apply a restore
+```
+
+If aliases are not loaded in the agent shell, use the scripts directly:
+
+```bash
+~/.local/bin/unifi-config-backup
+~/.local/bin/unifi-config-restore
+```
+
+Backup and restore are normal safety operations. Break-glass local access-control tooling remains owner-only and is intentionally not part of this skill workflow.
+
 ## Standard Workflow
 
-1. Classify the request: read-only, low-impact write, or high-impact write.
-2. Identify API surface: Site Manager, official local Network API, or legacy.
+1. Classify the request: read-only, low-impact write, high-impact write, backup, or restore.
+2. Identify API surface: Site Manager, official local Network API, legacy, or backup/restore tooling.
 3. Load only the reference page needed for the request.
 4. Run `env` to confirm which credentials and base URLs exist. Do not display secret values.
 5. Run a read-only call to find exact IDs and current state.
-6. For writes, build a short change plan with the target object, intended endpoint, and rollback.
-7. Execute the smallest possible change.
-8. Verify state after the change.
-9. Report what changed, what was verified, and any residual risk.
+6. Before any major write, run `unifi-backup` and wait for a successful timestamped backup path.
+7. For writes, build a short change plan with the target object, intended endpoint, and rollback.
+8. Execute the smallest possible change.
+9. Verify state after the change.
+10. Report what changed, what was verified, the backup path if one was created, and any residual risk.
+
+## Backup And Restore Tasks
+
+### On-demand backup
+
+If the user asks to back up the UniFi configuration, run:
+
+```bash
+unifi-backup
+```
+
+If aliases are not loaded:
+
+```bash
+~/.local/bin/unifi-config-backup
+```
+
+Report the created backup path. Do not paste backup contents into chat because backups may contain sensitive network configuration.
+
+### Backup before major changes
+
+Run `unifi-backup` before changes involving:
+
+- VLANs, networks, DHCP, DNS, WAN, routing, firewall, or port forwards
+- SSIDs, Wi-Fi security, guest/captive portal, or RADIUS profiles
+- switch port profiles, PoE actions, or port configuration
+- firmware upgrades, provisioning, adoption/forget/delete, gateway/AP/switch reboot
+- any batch change across multiple devices or sites
+
+For small reversible client actions such as reconnecting one verified Wi-Fi client, a backup is optional unless the user asks for it.
+
+### Restore workflow
+
+Restore is potentially disruptive. Only start a restore when the user explicitly asks to restore from backup or rollback UniFi configuration.
+
+If multiple restore points exist, list them newest-first and ask the user which date/time they want to restore to. Use the folder names as the source of truth:
+
+```bash
+find ~/.openclaw/unifi-backups -maxdepth 1 -type d -name 'backup-*' -printf '%f\n' | sort -r
+```
+
+After the user chooses a restore point, run a dry-run first:
+
+```bash
+unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+```
+
+If aliases are not loaded:
+
+```bash
+~/.local/bin/unifi-config-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+```
+
+Summarize the dry-run plan: selected backup, site, collections, objects that would update/create, extra current objects, and any errors. Then ask for explicit confirmation before applying.
+
+Only after explicit confirmation, apply the restore:
+
+```bash
+unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+```
+
+Do not use `--delete-extra` unless the user explicitly asks for a full rollback that deletes current objects not present in the backup. If the user asks for full rollback, explain the risk, run the dry-run with the chosen backup first, and ask for explicit confirmation before using `--delete-extra`.
+
+### Restore selection rule
+
+When multiple backup dates exist, do not guess. Present a concise list like:
+
+```text
+1. backup-20260509-193200
+2. backup-20260508-221015
+3. backup-20260507-101044
+```
+
+Ask: "Which backup date/time should I restore from?"
 
 ## Read-Only Tasks
 

@@ -222,6 +222,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     parser.add_argument('--site', help='Legacy UniFi site name from the backup. If omitted, choose interactively when needed.')
     parser.add_argument('--collections', help='Comma-separated collections. Default: safer config collections present in backup.')
     parser.add_argument('--apply', action='store_true', help='Actually apply restore. Without this, only a dry-run plan is produced.')
+    parser.add_argument('--confirm', help=f'Non-interactive apply confirmation. Must equal {CONFIRM_PHRASE!r}.')
     parser.add_argument('--delete-extra', action='store_true', help='Dangerous: delete current objects not present in the backup.')
     args = parser.parse_args(argv)
 
@@ -245,7 +246,10 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     if args.apply:
         print('\nWARNING: This can change Wi-Fi, VLAN, firewall, port profile, and related network configuration.')
-        typed = input(f'Type {CONFIRM_PHRASE!r} to apply: ').strip()
+        if args.confirm is not None:
+            typed = args.confirm.strip()
+        else:
+            typed = input(f'Type {CONFIRM_PHRASE!r} to apply: ').strip()
         if typed != CONFIRM_PHRASE:
             print('Confirmation did not match. Nothing changed.')
             return 1

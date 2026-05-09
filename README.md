@@ -16,7 +16,7 @@ This repository packages three things:
 | --- | --- | --- |
 | OpenClaw skill | `skill/unifi-api/` | Detailed AI instructions for UniFi API operations, safety tiers, endpoint selection, and troubleshooting. |
 | API helper | `skill/unifi-api/scripts/unifi_api.py` | Zero-dependency Python helper for Site Manager, official local Network API, and legacy controller API. |
-| Owner scripts | `scripts/` | Setup, status, break-glass disable/enable, secure backup, and dry-run restore tooling. |
+| Operational scripts | `scripts/` | Setup, status, break-glass disable/enable, secure backup, and dry-run/apply restore tooling. |
 
 The goal is not to let an AI randomly mutate your network. The goal is to give a trusted local agent enough structure to:
 
@@ -169,7 +169,7 @@ It hides secret input, confirms keys/passwords, backs up the old env file, write
 | `unifi-backup` | Create a secure timestamped config snapshot before major changes. |
 | `unifi-restore` | Choose an available backup newest-first and run a dry-run restore plan. |
 
-These commands are for the owner/operator. They are intentionally not included in the AI skill as things the agent should casually invoke.
+Setup/status/break-glass commands are for the owner/operator. Backup and restore are included in the AI skill because they are part of safe change management; restore still requires explicit user selection and confirmation.
 
 ## Break-Glass Procedure
 
@@ -300,7 +300,13 @@ Apply restore:
 unifi-restore --apply
 ```
 
-The restore tool requires this exact typed confirmation before applying:
+For non-interactive agent execution after explicit user confirmation, the same confirmation phrase can be supplied as a flag:
+
+```bash
+unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+```
+
+The restore tool requires this exact confirmation phrase before applying:
 
 ```text
 RESTORE UNIFI CONFIG

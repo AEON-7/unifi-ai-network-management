@@ -150,3 +150,46 @@ Rollback: <how to reverse it>
 ```
 
 Do not include secrets.
+
+
+## Recipe: Backup Before Major Change
+
+Use this before VLAN, firewall, Wi-Fi, routing, DHCP, DNS, port profile, firmware, or multi-device changes.
+
+1. Run:
+
+   ```bash
+   unifi-backup
+   ```
+
+2. Confirm the command prints a timestamped path under `~/.openclaw/unifi-backups/`.
+3. Include that backup path in the change plan and final report.
+4. If backup fails, do not proceed with a major write unless the user explicitly accepts the risk.
+
+## Recipe: Restore From Backup
+
+Use only when the user explicitly asks to restore or roll back UniFi configuration.
+
+1. List backups newest-first:
+
+   ```bash
+   find ~/.openclaw/unifi-backups -maxdepth 1 -type d -name 'backup-*' -printf '%f\n' | sort -r
+   ```
+
+2. If more than one backup exists, ask the user which date/time to restore.
+3. Run dry-run first:
+
+   ```bash
+   unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+   ```
+
+4. Summarize update/create/extra-current/error counts.
+5. Ask for explicit confirmation before applying.
+6. Apply only after confirmation:
+
+   ```bash
+   unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+   ```
+
+7. Use `--delete-extra` only when the user explicitly requests a full rollback and accepts deletion of objects not present in the backup.
+
