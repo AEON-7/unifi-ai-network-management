@@ -1,0 +1,17 @@
+# Never commit real credentials or generated sensitive backups.
+*.env.local
+unifi.env
+unifi.env.*
+.env.*
+!.env
+!env.example
+
+# Python/runtime noise
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local backup exports
+unifi-backups/
+restore-logs/
+*.bak-*

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+OPENCLAW_DIR="${OPENCLAW_DIR:-$HOME/.openclaw}"
+ENV_FILE="$OPENCLAW_DIR/unifi.env"
+DISABLED_FILE="$OPENCLAW_DIR/unifi.env.disabled"
+HELPER="$OPENCLAW_DIR/workspace/skills/unifi-api/scripts/unifi_api.py"
+
+if [[ -f "$ENV_FILE" ]]; then
+  echo "UniFi API access: ENABLED ($ENV_FILE exists)"
+  python3 "$HELPER" env 2>/dev/null || true
+elif [[ -f "$DISABLED_FILE" ]]; then
+  echo "UniFi API access: DISABLED ($DISABLED_FILE exists)"
+else
+  echo "UniFi API access: NOT CONFIGURED (no env file found)"
+fi
+
+if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active openclaw-gateway.service >/dev/null 2>&1; then
+  echo "OpenClaw gateway: active"
+else
+  echo "OpenClaw gateway: not active or not installed"
+fi

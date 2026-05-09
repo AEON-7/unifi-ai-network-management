@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+HELPER_DIR = Path(os.environ.get('OPENCLAW_DIR', str(Path.home() / '.openclaw'))) / 'workspace' / 'skills' / 'unifi-api' / 'scripts'
+sys.path.insert(0, str(HELPER_DIR))
+import unifi_api  # type: ignore
+
+BACKUP_ROOT = Path(os.environ.get('UNIFI_BACKUP_ROOT', str(Path(os.environ.get('OPENCLAW_DIR', str(Path.home() / '.openclaw'))) / 'unifi-backups'))) 
+DEFAULT_RESTORE_COLLECTIONS = [
+    'networkconf',
+    'wlanconf',
+    'firewallgroup',
+    'firewallrule',
+    'portconf',
+    'portforward',
+    'usergroup',
+    'radiusprofile',
+    'dynamicdns',
+    'trafficroute',
+    'trafficrule',
+    'dnsfilter',
+]
+CONFIRM_PHRASE = 'RESTORE UNIFI CONFIG'
+
+
+def load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def write_json(path: Path, obj: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + '\n', encoding='utf-8')
+    path.chmod(0o600)
+
+
+def list_backups() -> List[Path]:
+    if not BACKUP_ROOT.exists():
+        return []
+    return sorted(
+        [p for p in BACKUP_ROOT.iterdir() if p.is_dir() and p.name.startswith('backup-')],
+        key=lambda p: p.name,
+        reverse=True,
+    )
+
+
+def backup_summary(path: Path) -> str:
+    meta_path = path / 'metadata.json'
+    if not meta_path.exists():
+        return 'metadata missing'
+    try:
+        meta = load_json(meta_path)
+    except Exception:
+        return 'metadata unreadable'
+    created = meta.get('created_at', 'unknown time')
+    legacy = meta.get('legacy', {})
+    sites = legacy.get('sites') or []
+    site_text = ','.join(sites) if sites else 'no legacy sites'
+    return f'{created} | legacy: {site_text}'
+
+
+def choose_backup_interactive() -> Path:
+    backups = list_backups()
+    if not backups:
+        raise SystemExit(f'No UniFi backups found under {BACKUP_ROOT}. Run unifi-backup first.')
+    print('Available UniFi backups, newest first:')
+    for idx, path in enumerate(backups, 1):
+        print(f'  [{idx}] {path.name} - {backup_summary(path)}')
+    while True:
+        raw = input('Choose backup number to inspect/restore: ').strip()
+        try:
+            index = int(raw)
+            if 1 <= index <= len(backups):
+                return backups[index - 1]
+        except ValueError:
+            pass
+        print('Enter a valid backup number.')
+
+
+def data_list(response_obj: Any) -> List[Dict[str, Any]]:
+    if isinstance(response_obj, dict) and isinstance(response_obj.get('data'), list):
+        return [x for x in response_obj['data'] if isinstance(x, dict)]
+    if isinstance(response_obj, list):
+        return [x for x in response_obj if isinstance(x, dict)]
+    return []
+
+
+def object_id(obj: Dict[str, Any]) -> Optional[str]:
+    for key in ('_id', 'id'):
+        value = obj.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def available_sites(backup: Path) -> List[str]:
+    index_path = backup / 'legacy' / 'collection-index.json'
+    if index_path.exists():
+        idx = load_json(index_path)
+        if isinstance(idx, dict):
+            return sorted(idx.keys())
+    sites_root = backup / 'legacy' / 'sites'
+    if sites_root.exists():
+        return sorted([p.name for p in sites_root.iterdir() if p.is_dir()])
+    return []
+
+
+def available_collections(backup: Path, site: str) -> List[str]:
+    site_dir = backup / 'legacy' / 'sites' / site
+    if not site_dir.exists():
+        return []
+    result = []
+    for path in site_dir.glob('rest-*.json'):
+        name = path.stem.replace('rest-', '', 1)
+        result.append(name)
+    return sorted(result)
+
+
+def parse_collections(raw: Optional[str], available: List[str]) -> List[str]:
+    if raw:
+        requested = [x.strip() for x in raw.split(',') if x.strip()]
+    else:
+        requested = [x for x in DEFAULT_RESTORE_COLLECTIONS if x in available]
+    missing = [x for x in requested if x not in available]
+    if missing:
+        print(f'Warning: collections not present in backup and will be skipped: {", ".join(missing)}')
+    return [x for x in requested if x in available]
+
+
+def source_path_for(backup_obj: Dict[str, Any], site: str, collection: str) -> str:
+    source = backup_obj.get('source_path')
+    if source:
+        return str(source)
+    return f'/api/s/{site}/rest/{collection}'
+
+
+def restore_collection(client: Any, backup: Path, site: str, collection: str, *, apply: bool, delete_extra: bool) -> Dict[str, Any]:
+    path = backup / 'legacy' / 'sites' / site / f'rest-{collection}.json'
+    saved = load_json(path)
+    source_path = source_path_for(saved, site, collection)
+    backup_items = data_list(saved.get('response') if isinstance(saved, dict) else saved)
+    backup_by_id = {object_id(item): item for item in backup_items if object_id(item)}
+    plan: Dict[str, Any] = {
+        'site': site,
+        'collection': collection,
+        'source_path': source_path,
+        'backup_count': len(backup_items),
+        'would_update': 0,
+        'would_create': 0,
+        'would_delete_extra': 0,
+        'updated': 0,
+        'created': 0,
+        'deleted_extra': 0,
+        'errors': [],
+    }
+    try:
+        current = client.request('GET', source_path)
+        current_items = data_list(current)
+    except Exception as exc:
+        plan['errors'].append({'stage': 'read-current', 'error': str(exc), 'status': getattr(exc, 'status', None), 'body': getattr(exc, 'body', None)})
+        return plan
+    current_ids = {object_id(item) for item in current_items if object_id(item)}
+    for item in backup_items:
+        oid = object_id(item)
+        if oid and oid in current_ids:
+            plan['would_update'] += 1
+            if apply:
+                try:
+                    client.request('PUT', f'{source_path.rstrip("/")}/{oid}', body=item)
+                    plan['updated'] += 1
+                except Exception as exc:
+                    plan['errors'].append({'stage': 'update', 'id': oid, 'error': str(exc), 'status': getattr(exc, 'status', None), 'body': getattr(exc, 'body', None)})
+        else:
+            plan['would_create'] += 1
+            if apply:
+                try:
+                    client.request('POST', source_path, body=item)
+                    plan['created'] += 1
+                except Exception as exc:
+                    plan['errors'].append({'stage': 'create', 'id': oid, 'error': str(exc), 'status': getattr(exc, 'status', None), 'body': getattr(exc, 'body', None)})
+    extra_ids = sorted(x for x in current_ids if x and x not in backup_by_id)
+    plan['would_delete_extra'] = len(extra_ids)
+    if apply and delete_extra:
+        for oid in extra_ids:
+            try:
+                client.request('DELETE', f'{source_path.rstrip("/")}/{oid}')
+                plan['deleted_extra'] += 1
+            except Exception as exc:
+                plan['errors'].append({'stage': 'delete-extra', 'id': oid, 'error': str(exc), 'status': getattr(exc, 'status', None), 'body': getattr(exc, 'body', None)})
+    return plan
+
+
+def choose_site_interactive(sites: List[str]) -> str:
+    if not sites:
+        raise SystemExit('Selected backup has no legacy site configuration to restore.')
+    if len(sites) == 1:
+        return sites[0]
+    print('Sites in selected backup:')
+    for idx, site in enumerate(sites, 1):
+        print(f'  [{idx}] {site}')
+    while True:
+        raw = input('Choose site number: ').strip()
+        try:
+            index = int(raw)
+            if 1 <= index <= len(sites):
+                return sites[index - 1]
+        except ValueError:
+            pass
+        print('Enter a valid site number.')
+
+
+def main(argv: Optional[Iterable[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description='Inspect or restore a secure UniFi config backup')
+    parser.add_argument('--backup', help='Backup directory path. If omitted, choose interactively newest-first.')
+    parser.add_argument('--site', help='Legacy UniFi site name from the backup. If omitted, choose interactively when needed.')
+    parser.add_argument('--collections', help='Comma-separated collections. Default: safer config collections present in backup.')
+    parser.add_argument('--apply', action='store_true', help='Actually apply restore. Without this, only a dry-run plan is produced.')
+    parser.add_argument('--delete-extra', action='store_true', help='Dangerous: delete current objects not present in the backup.')
+    args = parser.parse_args(argv)
+
+    unifi_api.load_env_files()
+    backup = Path(args.backup).expanduser().resolve() if args.backup else choose_backup_interactive()
+    if not backup.exists() or not backup.is_dir():
+        raise SystemExit(f'Backup not found: {backup}')
+    sites = available_sites(backup)
+    site = args.site or choose_site_interactive(sites)
+    available = available_collections(backup, site)
+    collections = parse_collections(args.collections, available)
+    if not collections:
+        raise SystemExit(f'No rest config collections selected/found for site {site}.')
+
+    print(f'Selected backup: {backup}')
+    print(f'Site: {site}')
+    print(f'Collections: {", ".join(collections)}')
+    print('Mode:', 'APPLY' if args.apply else 'DRY RUN')
+    if args.delete_extra:
+        print('Delete extra current objects: YES')
+
+    if args.apply:
+        print('\nWARNING: This can change Wi-Fi, VLAN, firewall, port profile, and related network configuration.')
+        typed = input(f'Type {CONFIRM_PHRASE!r} to apply: ').strip()
+        if typed != CONFIRM_PHRASE:
+            print('Confirmation did not match. Nothing changed.')
+            return 1
+        client = unifi_api.make_legacy_client()
+    else:
+        try:
+            client = unifi_api.make_legacy_client()
+        except Exception as exc:
+            print(f'Could not log into legacy UniFi API for live diff: {exc}')
+            print('Backup selection is valid, but restore/apply requires legacy credentials in ~/.openclaw/unifi.env.')
+            return 1
+
+    results = [restore_collection(client, backup, site, collection, apply=args.apply, delete_extra=args.delete_extra) for collection in collections]
+    log_dir = BACKUP_ROOT / 'restore-logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.chmod(0o700)
+    log_path = log_dir / f'restore-{datetime.now().strftime("%Y%m%d-%H%M%S")}.json'
+    write_json(log_path, {'backup': str(backup), 'site': site, 'apply': args.apply, 'delete_extra': args.delete_extra, 'results': results})
+
+    print('\nRestore plan/results:')
+    for item in results:
+        error_count = len(item.get('errors') or [])
+        print(
+            f"- {item['collection']}: backup={item['backup_count']} "
+            f"update={item['would_update']} create={item['would_create']} "
+            f"extra-current={item['would_delete_extra']} errors={error_count}"
+        )
+    print(f'Log: {log_path}')
+    if not args.apply:
+        print('\nDry run only. To apply, re-run with --apply after reviewing the plan.')
+    elif any(item.get('errors') for item in results):
+        print('\nRestore attempted with errors. Review the log before making further changes.')
+        return 2
+    else:
+        print('\nRestore apply completed. Verify UniFi state in the controller UI/API.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

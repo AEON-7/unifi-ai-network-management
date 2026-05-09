@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import getpass
+import hashlib
+import json
+import os
+import re
+import socket
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+HELPER_DIR = Path(os.environ.get('OPENCLAW_DIR', str(Path.home() / '.openclaw'))) / 'workspace' / 'skills' / 'unifi-api' / 'scripts'
+sys.path.insert(0, str(HELPER_DIR))
+import unifi_api  # type: ignore
+
+BACKUP_ROOT = Path(os.environ.get('UNIFI_BACKUP_ROOT', str(Path(os.environ.get('OPENCLAW_DIR', str(Path.home() / '.openclaw'))) / 'unifi-backups'))) 
+CONFIG_COLLECTIONS = [
+    'networkconf',
+    'wlanconf',
+    'firewallgroup',
+    'firewallrule',
+    'portconf',
+    'portforward',
+    'routing',
+    'route',
+    'usergroup',
+    'setting',
+    'radiusprofile',
+    'dynamicdns',
+    'trafficroute',
+    'trafficrule',
+    'dnsfilter',
+    'hotspot2conf',
+    'voucher',
+]
+STATE_ENDPOINTS = {
+    'stat-device': 'stat/device',
+    'stat-clients': 'stat/sta',
+    'stat-health': 'stat/health',
+    'stat-sysinfo': 'stat/sysinfo',
+}
+
+
+def now_stamp() -> str:
+    return datetime.now().strftime('%Y%m%d-%H%M%S')
+
+
+def mkdir_private(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    path.chmod(0o700)
+
+
+def write_json(path: Path, obj: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + '\n', encoding='utf-8')
+    path.chmod(0o600)
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding='utf-8')
+    path.chmod(0o600)
+
+
+def slug(value: str) -> str:
+    return re.sub(r'[^A-Za-z0-9_.-]+', '_', value or 'default').strip('_') or 'default'
+
+
+def call(client: Any, method: str, path: str, body: Any = None) -> Tuple[bool, Any]:
+    try:
+        return True, client.request(method, path, body=body)
+    except Exception as exc:  # unifi_api.UniFiError plus connection/runtime issues
+        payload = {
+            'ok': False,
+            'error': str(exc),
+            'status': getattr(exc, 'status', None),
+            'url': getattr(exc, 'url', None),
+            'body': getattr(exc, 'body', None),
+        }
+        return False, payload
+
+
+def first_success(client: Any, paths: Iterable[str]) -> Tuple[Optional[str], Optional[Any], List[Dict[str, Any]]]:
+    errors: List[Dict[str, Any]] = []
+    for path in paths:
+        ok, data = call(client, 'GET', path)
+        if ok:
+            return path, data, errors
+        errors.append({'path': path, 'error': data})
+    return None, None, errors
+
+
+def extract_data_list(obj: Any) -> List[Dict[str, Any]]:
+    if isinstance(obj, dict) and isinstance(obj.get('data'), list):
+        return [x for x in obj['data'] if isinstance(x, dict)]
+    if isinstance(obj, list):
+        return [x for x in obj if isinstance(x, dict)]
+    return []
+
+
+def backup_site_manager(root: Path, metadata: Dict[str, Any]) -> None:
+    if not unifi_api.api_key_for('UNIFI_SITE_MANAGER_API_KEY', 'UNIFI_API_KEY'):
+        metadata['site_manager'] = {'attempted': False, 'reason': 'missing API key'}
+        return
+    try:
+        client = unifi_api.make_site_manager_client()
+    except Exception as exc:
+        metadata['site_manager'] = {'attempted': False, 'reason': str(exc)}
+        return
+    out = root / 'site-manager'
+    mkdir_private(out)
+    attempted = []
+    for name, path in {'hosts': '/hosts', 'sites': '/sites', 'devices': '/devices'}.items():
+        ok, data = call(client, 'GET', path)
+        attempted.append({'name': name, 'path': path, 'ok': ok})
+        write_json(out / f'{name}.json' if ok else out / 'errors' / f'{name}.error.json', data)
+    metadata['site_manager'] = {'attempted': True, 'endpoints': attempted}
+
+
+def backup_official_network(root: Path, metadata: Dict[str, Any]) -> None:
+    if not unifi_api.api_key_for('UNIFI_NETWORK_API_KEY', 'UNIFI_API_KEY'):
+        metadata['official_network'] = {'attempted': False, 'reason': 'missing API key'}
+        return
+    try:
+        client, prefix = unifi_api.make_network_client()
+    except Exception as exc:
+        metadata['official_network'] = {'attempted': False, 'reason': str(exc)}
+        return
+    out = root / 'official-network'
+    mkdir_private(out)
+    ok, sites = call(client, 'GET', unifi_api.join_prefix(prefix, '/sites'))
+    write_json(out / 'sites.json' if ok else out / 'errors' / 'sites.error.json', sites)
+    site_count = 0
+    if ok:
+        for site in extract_data_list(sites):
+            site_id = str(site.get('id') or site.get('_id') or site.get('site_id') or site.get('name') or '')
+            if not site_id:
+                continue
+            site_count += 1
+            site_dir = out / 'sites' / slug(site_id)
+            mkdir_private(site_dir)
+            for name in ('devices', 'clients'):
+                path = unifi_api.join_prefix(prefix, f'/sites/{site_id}/{name}')
+                ok2, data2 = call(client, 'GET', path)
+                write_json(site_dir / f'{name}.json' if ok2 else site_dir / 'errors' / f'{name}.error.json', data2)
+    metadata['official_network'] = {'attempted': True, 'site_count': site_count, 'prefix': prefix}
+
+
+def discover_legacy_sites(client: Any) -> Tuple[List[str], List[Dict[str, Any]], Optional[str]]:
+    path, data, errors = first_success(client, ['/api/self/sites', '/proxy/network/api/self/sites'])
+    sites = []
+    if data is not None:
+        for item in extract_data_list(data):
+            name = item.get('name') or item.get('site_id') or item.get('_id')
+            if name:
+                sites.append(str(name))
+    env_site = os.environ.get('UNIFI_SITE', 'default')
+    if env_site not in sites:
+        sites.append(env_site)
+    return sites or ['default'], errors, path
+
+
+def backup_legacy(root: Path, metadata: Dict[str, Any]) -> None:
+    if not (os.environ.get('UNIFI_USERNAME') and os.environ.get('UNIFI_PASSWORD')):
+        metadata['legacy'] = {'attempted': False, 'reason': 'missing UNIFI_USERNAME/UNIFI_PASSWORD'}
+        return
+    try:
+        client = unifi_api.make_legacy_client()
+    except Exception as exc:
+        metadata['legacy'] = {'attempted': False, 'reason': str(exc)}
+        return
+    out = root / 'legacy'
+    mkdir_private(out)
+    sites, site_errors, site_list_path = discover_legacy_sites(client)
+    write_json(out / 'site-discovery.json', {'site_list_path': site_list_path, 'sites': sites, 'errors': site_errors})
+    collection_index: Dict[str, Dict[str, str]] = {}
+    for site in sites:
+        site_dir = out / 'sites' / slug(site)
+        mkdir_private(site_dir)
+        collection_index[site] = {}
+        for name, endpoint in STATE_ENDPOINTS.items():
+            paths = [f'/api/s/{site}/{endpoint}', f'/proxy/network/api/s/{site}/{endpoint}']
+            path, data, errors = first_success(client, paths)
+            if path:
+                write_json(site_dir / f'{name}.json', {'source_path': path, 'response': data})
+            else:
+                write_json(site_dir / 'errors' / f'{name}.error.json', {'paths': paths, 'errors': errors})
+        for collection in CONFIG_COLLECTIONS:
+            paths = [f'/api/s/{site}/rest/{collection}', f'/proxy/network/api/s/{site}/rest/{collection}']
+            path, data, errors = first_success(client, paths)
+            if path:
+                collection_index[site][collection] = path
+                write_json(site_dir / f'rest-{collection}.json', {'collection': collection, 'source_path': path, 'response': data})
+            else:
+                write_json(site_dir / 'errors' / f'rest-{collection}.error.json', {'collection': collection, 'paths': paths, 'errors': errors})
+    write_json(out / 'collection-index.json', collection_index)
+    metadata['legacy'] = {'attempted': True, 'site_count': len(sites), 'sites': sites, 'site_list_path': site_list_path}
+
+
+def write_manifest(root: Path) -> None:
+    entries = []
+    for path in sorted(p for p in root.rglob('*') if p.is_file() and p.name != 'SHA256SUMS'):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        entries.append(f'{digest}  {path.relative_to(root).as_posix()}')
+    write_text(root / 'SHA256SUMS', '\n'.join(entries) + ('\n' if entries else ''))
+
+
+def harden_permissions(root: Path) -> None:
+    for path in root.rglob('*'):
+        if path.is_dir():
+            path.chmod(0o700)
+        elif path.is_file():
+            path.chmod(0o600)
+    root.chmod(0o700)
+
+
+def main() -> int:
+    unifi_api.load_env_files()
+    mkdir_private(BACKUP_ROOT)
+    stamp = now_stamp()
+    root = BACKUP_ROOT / f'backup-{stamp}'
+    if root.exists():
+        raise SystemExit(f'backup already exists: {root}')
+    mkdir_private(root)
+    metadata: Dict[str, Any] = {
+        'created_at': datetime.now(timezone.utc).isoformat(),
+        'created_by': getpass.getuser(),
+        'host': socket.gethostname(),
+        'backup_root': str(root),
+        'security': 'Directory mode 0700, files mode 0600. Backup may contain SSIDs, VLANs, firewall rules, and Wi-Fi passphrases.',
+        'restore_note': 'Use unifi-restore. Restore defaults to dry-run and requires explicit confirmation for apply.',
+    }
+    write_json(root / 'env-redacted.json', {
+        'site_manager_key': unifi_api.redacted(unifi_api.api_key_for('UNIFI_SITE_MANAGER_API_KEY', 'UNIFI_API_KEY')),
+        'network_base_url': os.environ.get('UNIFI_NETWORK_BASE_URL') or os.environ.get('UNIFI_BASE_URL') or 'missing',
+        'network_key': unifi_api.redacted(unifi_api.api_key_for('UNIFI_NETWORK_API_KEY', 'UNIFI_API_KEY')),
+        'legacy_base_url': os.environ.get('UNIFI_LEGACY_BASE_URL') or os.environ.get('UNIFI_NETWORK_BASE_URL') or os.environ.get('UNIFI_BASE_URL') or 'missing',
+        'legacy_username': unifi_api.redacted(os.environ.get('UNIFI_USERNAME')),
+        'legacy_site': os.environ.get('UNIFI_SITE', 'default'),
+    })
+    backup_site_manager(root, metadata)
+    backup_official_network(root, metadata)
+    backup_legacy(root, metadata)
+    write_json(root / 'metadata.json', metadata)
+    write_text(root / 'README.txt', 'Secure UniFi configuration snapshot. Treat as sensitive. Use unifi-restore to inspect or restore.\n')
+    write_manifest(root)
+    harden_permissions(root)
+    latest = BACKUP_ROOT / 'latest'
+    try:
+        if latest.is_symlink() or latest.exists():
+            latest.unlink()
+        latest.symlink_to(root.name)
+    except OSError:
+        pass
+    print(f'UniFi backup created: {root}')
+    print('Treat this backup as sensitive; it may include Wi-Fi credentials and network config.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

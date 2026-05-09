@@ -1,0 +1,33 @@
+# Optional agent hints for OpenClaw/OpenAI-compatible agents.
+# The SKILL.md remains the primary contract; these hints make model routing clearer
+# for systems that ingest per-agent YAML metadata.
+
+trigger_phrases:
+  - unifi
+  - ubiquiti
+  - site manager
+  - network application
+  - dream machine
+  - udm
+  - uxg
+  - cloud key
+  - access point
+  - switch port
+  - vlan
+  - ssid
+  - wifi client
+  - wan health
+  - guest wifi
+
+execution_policy:
+  read_first: true
+  prefer_official_api: true
+  redact_secrets: true
+  require_confirmation_for_high_impact_writes: true
+  helper_script: ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py
+
+safety_notes:
+  - Never expose API keys, cookies, passwords, or CSRF tokens.
+  - Verify site and object identity before write operations.
+  - Avoid changes that could sever the current management path unless explicitly requested.
+  - Use legacy private endpoints only when official APIs cannot perform the task.

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+OPENCLAW_DIR="${OPENCLAW_DIR:-$HOME/.openclaw}"
+ENV_FILE="$OPENCLAW_DIR/unifi.env"
+DISABLED_FILE="$OPENCLAW_DIR/unifi.env.disabled"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+
+restart_gateway() {
+  if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files openclaw-gateway.service >/dev/null 2>&1; then
+    systemctl --user restart openclaw-gateway.service
+    echo "OpenClaw gateway restarted."
+  else
+    echo "OpenClaw gateway service not found; restart your agent/gateway manually if it caches env."
+  fi
+}
+
+mkdir -p "$OPENCLAW_DIR"
+chmod 700 "$OPENCLAW_DIR" 2>/dev/null || true
+
+if [[ -f "$DISABLED_FILE" ]]; then
+  if [[ -f "$ENV_FILE" ]]; then
+    cp -p "$ENV_FILE" "${ENV_FILE}.bak-${STAMP}"
+    chmod 600 "${ENV_FILE}.bak-${STAMP}"
+    echo "Existing enabled file copied to ${ENV_FILE}.bak-${STAMP}"
+  fi
+  mv "$DISABLED_FILE" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  echo "UniFi API access reinstated locally: $DISABLED_FILE -> $ENV_FILE"
+  restart_gateway
+elif [[ -f "$ENV_FILE" ]]; then
+  echo "UniFi API access already enabled: $ENV_FILE"
+else
+  echo "No disabled UniFi env file found. Create $ENV_FILE first."
+  exit 1
+fi
