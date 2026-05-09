@@ -58,6 +58,8 @@ unifi-setup
 unifi-status
 ```
 
+If your shell already had an older `unifi-*` alias block, open a new shell or run `source ~/.bashrc` after setup. The installer is safe to re-run; it backs up an existing `~/.openclaw/workspace/skills/unifi-api` directory before replacing it and preserves an existing `~/.openclaw/unifi.env` unless `--force-env` is used.
+
 `setup.sh` installs:
 
 ```text
@@ -71,7 +73,7 @@ unifi-status
 ~/.openclaw/unifi.env
 ```
 
-It also adds aliases:
+It also adds aliases to `~/.bashrc`:
 
 ```bash
 unifi-status
@@ -81,6 +83,8 @@ unifi-on
 unifi-backup
 unifi-restore
 ```
+
+Use `./setup.sh --no-aliases` if you want the files installed without modifying your shell rc file. Use `./setup.sh --force-env` only if you intentionally want to replace the existing env file with `env.example` after creating a timestamped backup.
 
 If you do not use OpenClaw, you can still use the helper script and docs. Install the skill folder wherever your agent framework expects tool instructions.
 
@@ -102,10 +106,10 @@ It preserves this layout because the `SKILL.md` references `references/` and `sc
 
 ```text
 unifi-api/
-??? SKILL.md
-??? scripts/unifi_api.py
-??? references/
-??? agents/openai.yaml
+|-- SKILL.md
+|-- scripts/unifi_api.py
+|-- references/
+`-- agents/openai.yaml
 ```
 
 For other agent frameworks, copy the entire `skill/unifi-api` directory into that framework's skills/tools directory. Do not copy only `SKILL.md`; the helper script and reference files are part of the package.
