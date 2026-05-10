@@ -14,7 +14,7 @@ This repository packages three things:
 
 | Component | Location | Purpose |
 | --- | --- | --- |
-| OpenClaw skill | `skill/unifi-api/` | Detailed AI instructions for UniFi API operations, safety tiers, endpoint selection, and troubleshooting. |
+| Agent skill | `skill/unifi-api/` | `SKILL.md` package for OpenClaw (`~/.openclaw/workspace/skills/unifi-api`) or Hermes (`~/.hermes/skills/unifi-api`) with UniFi API operations, safety tiers, endpoint selection, and troubleshooting. |
 | API helper | `skill/unifi-api/scripts/unifi_api.py` | Zero-dependency Python helper for Site Manager, official local Network API, and legacy controller API. |
 | Operational scripts | `scripts/` | Setup, status, break-glass disable/enable, secure backup, and dry-run/apply restore tooling. |
 
@@ -72,7 +72,7 @@ unifi-status
 hermes doctor
 ```
 
-If your shell already had an older `unifi-*` alias block, open a new shell or run `source ~/.bashrc` after setup. The installer is safe to re-run; it backs up an existing `~/.openclaw/workspace/skills/unifi-api` directory before replacing it and preserves an existing `~/.openclaw/unifi.env` unless `--force-env` is used.
+If your shell already had an older `unifi-*` alias block, open a new shell or run `source ~/.bashrc` after setup. The installer is safe to re-run; it backs up an existing skill directory before replacing it and preserves the existing target env file unless `--force-env` is used.
 
 `setup.sh` installs:
 
@@ -107,7 +107,7 @@ unifi-restore
 
 Use `./setup.sh --target hermes` for Hermes Agent, `./setup.sh --target openclaw` for OpenClaw, `./setup.sh --no-aliases` if you want files installed without modifying your shell rc file, and `./setup.sh --force-env` only if you intentionally want to replace the existing env file with `env.example` after creating a timestamped backup.
 
-If you do not use OpenClaw, you can still use the helper script and docs. Install the skill folder wherever your agent framework expects tool instructions.
+If you do not use OpenClaw or Hermes, you can still use the helper script and docs. Install the skill folder wherever your agent framework expects tool instructions.
 
 ### What `setup.sh` Copies
 
@@ -117,10 +117,11 @@ The installer copies the canonical skill directory from:
 ./skill/unifi-api/
 ```
 
-to the standard OpenClaw workspace skill path:
+to the selected agent skill path:
 
 ```text
-~/.openclaw/workspace/skills/unifi-api/
+~/.openclaw/workspace/skills/unifi-api/  # OpenClaw
+~/.hermes/skills/unifi-api/              # Hermes
 ```
 
 It preserves this layout because the `SKILL.md` references `references/` and `scripts/unifi_api.py` by relative path:
@@ -194,7 +195,7 @@ Use the interactive setup tool instead of editing by hand:
 unifi-setup
 ```
 
-It hides secret input, confirms keys/passwords, backs up the old env file, writes `0600`, and can restart OpenClaw if installed as a user service.
+It hides secret input, confirms keys/passwords, backs up the old env file, writes `0600`, and can restart OpenClaw if installed as a user service. Hermes users should start a fresh Hermes session after setup so the skill catalog reloads.
 
 ## Owner Commands
 
@@ -262,7 +263,11 @@ Use the local Network API key for device/client/site operations on your own cons
 
    ```bash
    unifi-status
+   # OpenClaw
    python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py network-get /sites
+
+   # Hermes
+   python3 ~/.hermes/skills/unifi-api/scripts/unifi_api.py network-get /sites
    ```
 
 Default local prefix:
@@ -286,7 +291,7 @@ Minimum safety baseline:
 1. Use a dedicated UniFi service/integration key.
 2. Prefer read-only or least-privilege access when UniFi exposes it.
 3. Keep write-capable keys out of chat history.
-4. Store keys only in `~/.openclaw/unifi.env` with mode `0600`.
+4. Store keys only in the selected private env file, `~/.openclaw/unifi.env` for OpenClaw or `~/.hermes/unifi.env` for Hermes, with mode `0600`.
 5. Use `unifi-backup` before major changes.
 6. Use official APIs before legacy private endpoints.
 7. Require exact object verification before writes: site, name, MAC/IP/model/id.
@@ -342,7 +347,8 @@ unifi-restore --apply
 For non-interactive agent execution after explicit user confirmation, the same confirmation phrase can be supplied as a flag:
 
 ```bash
-unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'   # OpenClaw
+unifi-restore --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'     # Hermes
 ```
 
 The restore tool requires this exact confirmation phrase before applying:
@@ -467,28 +473,28 @@ High-impact actions require explicit user intent:
 
 ```text
 .
-??? README.md
-??? setup.sh
-??? env.example
-??? .env                      # intentionally empty placeholder
-??? AGENTS.md                 # installation/behavior notes for agent frameworks
-??? scripts/
-?   ??? unifi-api-status
-?   ??? unifi-api-configure
-?   ??? unifi-api-disable
-?   ??? unifi-api-enable
-?   ??? unifi-config-backup
-?   ??? unifi-config-restore
-??? skill/unifi-api/
-?   ??? SKILL.md
-?   ??? scripts/unifi_api.py
-?   ??? references/
-?   ??? agents/openai.yaml
-??? docs/
-    ??? API-ENDPOINTS.md
-    ??? OPSEC.md
-    ??? USE-CASES.md
-    ??? LOCAL_OWNER_RUNBOOK.md
+|-- README.md
+|-- setup.sh
+|-- env.example
+|-- .env                      # intentionally empty placeholder
+|-- AGENTS.md                 # installation/behavior notes for agent frameworks
+|-- scripts/
+|   |-- unifi-api-status
+|   |-- unifi-api-configure
+|   |-- unifi-api-disable
+|   |-- unifi-api-enable
+|   |-- unifi-config-backup
+|   `-- unifi-config-restore
+|-- skill/unifi-api/
+|   |-- SKILL.md
+|   |-- scripts/unifi_api.py
+|   |-- references/
+|   `-- agents/openai.yaml
+`-- docs/
+    |-- API-ENDPOINTS.md
+    |-- OPSEC.md
+    |-- USE-CASES.md
+    `-- LOCAL_OWNER_RUNBOOK.md
 ```
 
 ## Requirements
@@ -496,7 +502,7 @@ High-impact actions require explicit user intent:
 - Linux or WSL-style shell environment
 - Python 3.10+
 - Bash
-- OpenClaw if you want automatic skill installation into `~/.openclaw/workspace/skills`
+- OpenClaw or Hermes if you want automatic skill installation into their default skill directories
 - UniFi Network version with API integrations for official local API access
 
 The API helper intentionally uses Python standard library only.

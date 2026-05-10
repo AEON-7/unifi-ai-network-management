@@ -1,6 +1,6 @@
 # Agent Integration Guide
 
-This repository packages a UniFi API skill plus owner-operated setup and safety tooling. It is written for OpenClaw-style skills, but the same directory can be used by any agent framework that supports filesystem skills or tool instructions.
+This repository packages a UniFi API skill plus owner-operated setup and safety tooling. It supports OpenClaw and Hermes Agent directly, and the same `SKILL.md` directory can be adapted to any agent framework that supports filesystem skills or tool instructions.
 
 ## Canonical Skill Directory
 
@@ -14,13 +14,13 @@ Install it as a directory, not as a single markdown file. The directory must kee
 
 ```text
 unifi-api/
-??? SKILL.md
-??? scripts/unifi_api.py
-??? references/api-surfaces.md
-??? references/endpoints.md
-??? references/task-recipes.md
-??? references/troubleshooting.md
-??? agents/openai.yaml
+|-- SKILL.md
+|-- scripts/unifi_api.py
+|-- references/api-surfaces.md
+|-- references/endpoints.md
+|-- references/task-recipes.md
+|-- references/troubleshooting.md
+`-- agents/openai.yaml
 ```
 
 The helper script is part of the skill contract. The agent should prefer deterministic helper calls over hand-written curl commands.
@@ -36,7 +36,7 @@ Default OpenClaw path:
 The provided installer does this automatically:
 
 ```bash
-./setup.sh
+./setup.sh --target openclaw
 ```
 
 Manual install:
@@ -87,7 +87,7 @@ Hermes references used for this layout: Hermes documents skills as `SKILL.md` fi
 
 ## Other Agent Frameworks
 
-For non-OpenClaw frameworks:
+For non-OpenClaw/non-Hermes frameworks:
 
 1. Copy `skill/unifi-api/` into the framework's skill/tool directory.
 2. Make sure the framework can read `SKILL.md`.
@@ -98,10 +98,11 @@ For non-OpenClaw frameworks:
 
 ## Credential File
 
-Default env location:
+Default env locations:
 
 ```text
-~/.openclaw/unifi.env
+~/.openclaw/unifi.env  # OpenClaw
+~/.hermes/unifi.env    # Hermes
 ```
 
 The helper also checks:
@@ -110,6 +111,9 @@ The helper also checks:
 ~/.openclaw/.env
 ~/.openclaw/openclaw.env
 ~/.openclaw/workspace/.env
+~/.hermes/unifi.env
+~/.hermes/.env
+~/.hermes/skills/unifi-api/.env
 <skill-dir>/.env
 ```
 
@@ -150,7 +154,7 @@ A safe UniFi agent should:
 
 ## Helper Script Examples
 
-From an installed OpenClaw skill:
+From an installed OpenClaw target:
 
 ```bash
 python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py env
@@ -159,10 +163,29 @@ python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py network-get 
 python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py legacy-clients --site default
 ```
 
+From an installed Hermes target:
+
+```bash
+python3 ~/.hermes/skills/unifi-api/scripts/unifi_api.py env
+python3 ~/.hermes/skills/unifi-api/scripts/unifi_api.py site-manager-get /sites
+python3 ~/.hermes/skills/unifi-api/scripts/unifi_api.py network-get /sites
+python3 ~/.hermes/skills/unifi-api/scripts/unifi_api.py legacy-clients --site default
+```
+
 Write helpers require an explicit acknowledgement flag:
+
+OpenClaw target:
 
 ```bash
 python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py legacy-post /api/s/default/cmd/stamgr \
+  --body '{"cmd":"kick-sta","mac":"aa:bb:cc:dd:ee:ff"}' \
+  --yes-I-understand
+```
+
+Hermes target:
+
+```bash
+python3 ~/.hermes/skills/unifi-api/scripts/unifi_api.py legacy-post /api/s/default/cmd/stamgr \
   --body '{"cmd":"kick-sta","mac":"aa:bb:cc:dd:ee:ff"}' \
   --yes-I-understand
 ```
@@ -172,8 +195,10 @@ python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py legacy-post 
 After installation:
 
 ```bash
-python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py env
-python3 -m py_compile ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py
+python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py env      # OpenClaw
+python3 ~/.hermes/skills/unifi-api/scripts/unifi_api.py env                 # Hermes
+python3 -m py_compile ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py  # OpenClaw
+python3 -m py_compile ~/.hermes/skills/unifi-api/scripts/unifi_api.py              # Hermes
 ```
 
 If OpenClaw is installed:
@@ -183,3 +208,11 @@ openclaw skills check --agent <agent-name>
 ```
 
 Expected result: the skill named `unifi-api` is eligible and visible to the intended agent.
+
+If Hermes is installed:
+
+```bash
+hermes doctor
+```
+
+Expected result: Hermes diagnostics pass and a fresh Hermes session can discover the `unifi-api` skill from `~/.hermes/skills/unifi-api/`.
