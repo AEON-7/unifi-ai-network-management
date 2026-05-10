@@ -117,7 +117,7 @@ The helper also checks:
 <skill-dir>/.env
 ```
 
-Use `env.example` as the template. Never commit a real env file.
+Use `env.example` as the template. The repository should not contain a committed `.env`; copy `env.example` to the selected private runtime env path or let `setup.sh` do it. Never commit a real env file.
 
 ## Operational Commands And Agent Boundaries
 

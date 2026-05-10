@@ -1,9 +1,9 @@
 # Never commit real credentials or generated sensitive backups.
+.env
+.env.*
 *.env.local
 unifi.env
 unifi.env.*
-.env.*
-!.env
 !env.example
 
 # Python/runtime noise

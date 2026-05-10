@@ -158,6 +158,15 @@ The private credential file is stored separately at:
 
 After setup, open a new shell or run `source ~/.bashrc`, then run `unifi-setup`. Start a new Hermes session so it reloads the skill catalog. If Hermes is installed, `hermes doctor` should still pass.
 
+
+This repository intentionally does **not** commit a real `.env` file. The common and safer convention is:
+
+1. Commit `env.example` as a template.
+2. Copy it to a private runtime env file.
+3. Keep real `.env` / `unifi.env` files ignored by git.
+
+`setup.sh` handles this automatically by copying `env.example` to the target-private env path (`~/.openclaw/unifi.env` or `~/.hermes/unifi.env`) when one does not already exist.
+
 ## Environment File
 
 The private env file lives at `~/.openclaw/unifi.env` for OpenClaw or `~/.hermes/unifi.env` for Hermes.
@@ -476,7 +485,6 @@ High-impact actions require explicit user intent:
 |-- README.md
 |-- setup.sh
 |-- env.example
-|-- .env                      # intentionally empty placeholder
 |-- AGENTS.md                 # installation/behavior notes for agent frameworks
 |-- scripts/
 |   |-- unifi-api-status
