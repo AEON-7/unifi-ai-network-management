@@ -9,11 +9,42 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-HELPER_DIR = Path(os.environ.get('OPENCLAW_DIR', str(Path.home() / '.openclaw'))) / 'workspace' / 'skills' / 'unifi-api' / 'scripts'
+def agent_home() -> Path:
+    if os.environ.get('UNIFI_AGENT_HOME'):
+        return Path(os.environ['UNIFI_AGENT_HOME']).expanduser()
+    if os.environ.get('OPENCLAW_DIR'):
+        return Path(os.environ['OPENCLAW_DIR']).expanduser()
+    if os.environ.get('HERMES_HOME'):
+        return Path(os.environ['HERMES_HOME']).expanduser()
+    home = Path.home()
+    hermes_skill = home / '.hermes' / 'skills' / 'unifi-api'
+    openclaw_skill = home / '.openclaw' / 'workspace' / 'skills' / 'unifi-api'
+    if hermes_skill.exists() and not openclaw_skill.exists():
+        return home / '.hermes'
+    return home / '.openclaw'
+
+
+def skill_dir(base: Path) -> Path:
+    if os.environ.get('UNIFI_SKILL_DIR'):
+        return Path(os.environ['UNIFI_SKILL_DIR']).expanduser()
+    candidates = [
+        base / 'workspace' / 'skills' / 'unifi-api',
+        base / 'skills' / 'unifi-api',
+        Path.home() / '.openclaw' / 'workspace' / 'skills' / 'unifi-api',
+        Path.home() / '.hermes' / 'skills' / 'unifi-api',
+    ]
+    for candidate in candidates:
+        if (candidate / 'scripts' / 'unifi_api.py').exists():
+            return candidate
+    return candidates[0]
+
+
+AGENT_HOME = agent_home()
+HELPER_DIR = skill_dir(AGENT_HOME) / 'scripts'
 sys.path.insert(0, str(HELPER_DIR))
 import unifi_api  # type: ignore
 
-BACKUP_ROOT = Path(os.environ.get('UNIFI_BACKUP_ROOT', str(Path(os.environ.get('OPENCLAW_DIR', str(Path.home() / '.openclaw'))) / 'unifi-backups'))) 
+BACKUP_ROOT = Path(os.environ.get('UNIFI_BACKUP_ROOT', str(AGENT_HOME / 'unifi-backups')))
 DEFAULT_RESTORE_COLLECTIONS = [
     'networkconf',
     'wlanconf',

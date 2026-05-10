@@ -52,6 +52,9 @@ def load_env_files() -> None:
             Path.home() / ".openclaw" / ".env",
             Path.home() / ".openclaw" / "openclaw.env",
             Path.home() / ".openclaw" / "workspace" / ".env",
+            Path.home() / ".hermes" / "unifi.env",
+            Path.home() / ".hermes" / ".env",
+            Path.home() / ".hermes" / "skills" / "unifi-api" / ".env",
             skill_root() / ".env",
         ]
     )
@@ -232,13 +235,19 @@ def make_legacy_client() -> UniFiClient:
 
 def command_env(_args: argparse.Namespace) -> None:
     data = {
-        "env_files_checked": [
-            str(Path.home() / ".openclaw" / "unifi.env"),
-            str(Path.home() / ".openclaw" / ".env"),
-            str(Path.home() / ".openclaw" / "openclaw.env"),
-            str(Path.home() / ".openclaw" / "workspace" / ".env"),
-            str(skill_root() / ".env"),
-        ],
+        "env_files_checked": (
+            ([os.environ["UNIFI_ENV_FILE"]] if os.environ.get("UNIFI_ENV_FILE") else [])
+            + [
+                str(Path.home() / ".openclaw" / "unifi.env"),
+                str(Path.home() / ".openclaw" / ".env"),
+                str(Path.home() / ".openclaw" / "openclaw.env"),
+                str(Path.home() / ".openclaw" / "workspace" / ".env"),
+                str(Path.home() / ".hermes" / "unifi.env"),
+                str(Path.home() / ".hermes" / ".env"),
+                str(Path.home() / ".hermes" / "skills" / "unifi-api" / ".env"),
+                str(skill_root() / ".env"),
+            ]
+        ),
         "site_manager": {
             "base_url": os.environ.get("UNIFI_SITE_MANAGER_BASE_URL", DEFAULT_SITE_MANAGER_BASE),
             "api_key": redacted(api_key_for("UNIFI_SITE_MANAGER_API_KEY", "UNIFI_API_KEY")),

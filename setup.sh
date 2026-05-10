@@ -2,48 +2,67 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OPENCLAW_DIR="${OPENCLAW_DIR:-$HOME/.openclaw}"
-SKILL_DST="$OPENCLAW_DIR/workspace/skills/unifi-api"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
-ENV_FILE="$OPENCLAW_DIR/unifi.env"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 SHELL_RC="${SHELL_RC:-$HOME/.bashrc}"
+TARGET="openclaw"
 
 say() { printf '%s\n' "$*"; }
 
 usage() {
   cat <<USAGE
-Usage: ./setup.sh [--no-aliases] [--force-env]
+Usage: ./setup.sh [--target openclaw|hermes] [--no-aliases] [--force-env]
 
-Installs:
-  Skill:   $SKILL_DST
-  Scripts: $BIN_DIR
-  Env:     $ENV_FILE
+Targets:
+  openclaw  Skill -> ~/.openclaw/workspace/skills/unifi-api, env -> ~/.openclaw/unifi.env
+  hermes    Skill -> ~/.hermes/skills/unifi-api, env -> ~/.hermes/unifi.env
 
 Options:
-  --no-aliases  Install files but do not modify shell rc.
-  --force-env   Replace existing env file after backing it up.
+  --target <name>  Install for openclaw or hermes. Default: openclaw.
+  --no-aliases    Install files but do not modify shell rc.
+  --force-env     Replace existing env file after backing it up.
 USAGE
 }
 
 ADD_ALIASES=1
 FORCE_ENV=0
-for arg in "$@"; do
-  case "$arg" in
-    --no-aliases) ADD_ALIASES=0 ;;
-    --force-env) FORCE_ENV=1 ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --target)
+      TARGET="${2:-}"
+      shift 2
+      ;;
+    --target=*)
+      TARGET="${1#--target=}"
+      shift
+      ;;
+    --no-aliases) ADD_ALIASES=0; shift ;;
+    --force-env) FORCE_ENV=1; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "Unknown argument: $arg" >&2; usage; exit 2 ;;
+    *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
 done
+
+case "$TARGET" in
+  openclaw)
+    AGENT_HOME="${OPENCLAW_DIR:-$HOME/.openclaw}"
+    SKILL_DST="$AGENT_HOME/workspace/skills/unifi-api"
+    ;;
+  hermes)
+    AGENT_HOME="${HERMES_HOME:-$HOME/.hermes}"
+    SKILL_DST="$AGENT_HOME/skills/unifi-api"
+    ;;
+  *) echo "Unsupported target: $TARGET" >&2; usage; exit 2 ;;
+esac
+ENV_FILE="$AGENT_HOME/unifi.env"
 
 if [[ ! -d "$REPO_DIR/skill/unifi-api" ]]; then
   echo "Missing skill/unifi-api. Run setup from the repo root." >&2
   exit 1
 fi
 
-mkdir -p "$OPENCLAW_DIR/workspace/skills" "$BIN_DIR"
-chmod 700 "$OPENCLAW_DIR" 2>/dev/null || true
+mkdir -p "$(dirname "$SKILL_DST")" "$BIN_DIR" "$AGENT_HOME"
+chmod 700 "$AGENT_HOME" 2>/dev/null || true
 
 if [[ -e "$SKILL_DST" ]]; then
   mv "$SKILL_DST" "${SKILL_DST}.bak-${STAMP}"
@@ -78,32 +97,49 @@ fi
 
 if [[ "$ADD_ALIASES" -eq 1 ]]; then
   touch "$SHELL_RC"
-  if ! grep -q 'UniFi AI Network Management aliases' "$SHELL_RC"; then
-    cat >> "$SHELL_RC" <<ALIASES
+  python3 - "$SHELL_RC" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+text = p.read_text(encoding='utf-8') if p.exists() else ''
+start = '# UniFi AI Network Management aliases'
+end = '# End UniFi AI Network Management aliases'
+while start in text and end in text:
+    before, rest = text.split(start, 1)
+    _, after = rest.split(end, 1)
+    text = before.rstrip() + '\n' + after.lstrip('\n')
+p.write_text(text.rstrip() + '\n', encoding='utf-8')
+PY
+  cat >> "$SHELL_RC" <<ALIASES
 
 # UniFi AI Network Management aliases
-alias unifi-status='$BIN_DIR/unifi-api-status'
-alias unifi-setup='$BIN_DIR/unifi-api-configure'
-alias unifi-off='$BIN_DIR/unifi-api-disable'
-alias unifi-on='$BIN_DIR/unifi-api-enable'
-alias unifi-backup='$BIN_DIR/unifi-config-backup'
-alias unifi-restore='$BIN_DIR/unifi-config-restore'
+alias unifi-status='UNIFI_AGENT_HOME="$AGENT_HOME" UNIFI_SKILL_DIR="$SKILL_DST" UNIFI_ENV_FILE="$ENV_FILE" "$BIN_DIR/unifi-api-status"'
+alias unifi-setup='UNIFI_AGENT_HOME="$AGENT_HOME" UNIFI_SKILL_DIR="$SKILL_DST" UNIFI_ENV_FILE="$ENV_FILE" "$BIN_DIR/unifi-api-configure"'
+alias unifi-off='UNIFI_AGENT_HOME="$AGENT_HOME" UNIFI_SKILL_DIR="$SKILL_DST" UNIFI_ENV_FILE="$ENV_FILE" "$BIN_DIR/unifi-api-disable"'
+alias unifi-on='UNIFI_AGENT_HOME="$AGENT_HOME" UNIFI_SKILL_DIR="$SKILL_DST" UNIFI_ENV_FILE="$ENV_FILE" "$BIN_DIR/unifi-api-enable"'
+alias unifi-backup='UNIFI_AGENT_HOME="$AGENT_HOME" UNIFI_SKILL_DIR="$SKILL_DST" UNIFI_ENV_FILE="$ENV_FILE" "$BIN_DIR/unifi-config-backup"'
+alias unifi-restore='UNIFI_AGENT_HOME="$AGENT_HOME" UNIFI_SKILL_DIR="$SKILL_DST" UNIFI_ENV_FILE="$ENV_FILE" "$BIN_DIR/unifi-config-restore"'
+# End UniFi AI Network Management aliases
 ALIASES
-    say "Aliases added to $SHELL_RC"
-  else
-    say "Aliases already present in $SHELL_RC"
-  fi
+  say "Aliases written to $SHELL_RC for target: $TARGET"
 fi
 
 python3 -m py_compile "$SKILL_DST/scripts/unifi_api.py" "$BIN_DIR/unifi-config-backup" "$BIN_DIR/unifi-config-restore"
 rm -rf "$SKILL_DST/scripts/__pycache__" "$BIN_DIR/__pycache__" 2>/dev/null || true
 
 say ""
-say "Install complete."
+say "Install complete for target: $TARGET"
+say "Skill: $SKILL_DST"
+say "Env:   $ENV_FILE"
 say "Next steps:"
 say "  1. source $SHELL_RC"
 say "  2. unifi-setup"
 say "  3. unifi-status"
 say ""
-say "For OpenClaw, run its skill check command if available, for example:"
-say "  openclaw skills check --agent <agent-name>"
+if [[ "$TARGET" == "openclaw" ]]; then
+  say "For OpenClaw, run its skill check command if available, for example:"
+  say "  openclaw skills check --agent <agent-name>"
+else
+  say "For Hermes, start a new Hermes session or run its diagnostics, for example:"
+  say "  hermes doctor"
+fi

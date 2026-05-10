@@ -47,15 +47,29 @@ Ubiquiti states that localized Network API documentation is available inside Uni
 
 ## Quick Start
 
-Clone the repo on the machine where your agent or gateway runs:
+Clone the repo on the machine where your agent or gateway runs.
+
+For OpenClaw:
 
 ```bash
 git clone https://github.com/AEON-7/unifi-ai-network-management.git
 cd unifi-ai-network-management
-./setup.sh
+./setup.sh --target openclaw
 source ~/.bashrc
 unifi-setup
 unifi-status
+```
+
+For Hermes Agent:
+
+```bash
+git clone https://github.com/AEON-7/unifi-ai-network-management.git
+cd unifi-ai-network-management
+./setup.sh --target hermes
+source ~/.bashrc
+unifi-setup
+unifi-status
+hermes doctor
 ```
 
 If your shell already had an older `unifi-*` alias block, open a new shell or run `source ~/.bashrc` after setup. The installer is safe to re-run; it backs up an existing `~/.openclaw/workspace/skills/unifi-api` directory before replacing it and preserves an existing `~/.openclaw/unifi.env` unless `--force-env` is used.
@@ -63,14 +77,21 @@ If your shell already had an older `unifi-*` alias block, open a new shell or ru
 `setup.sh` installs:
 
 ```text
+# OpenClaw target
 ~/.openclaw/workspace/skills/unifi-api/
+~/.openclaw/unifi.env
+
+# Hermes target
+~/.hermes/skills/unifi-api/
+~/.hermes/unifi.env
+
+# Both targets
 ~/.local/bin/unifi-api-status
 ~/.local/bin/unifi-api-configure
 ~/.local/bin/unifi-api-disable
 ~/.local/bin/unifi-api-enable
 ~/.local/bin/unifi-config-backup
 ~/.local/bin/unifi-config-restore
-~/.openclaw/unifi.env
 ```
 
 It also adds aliases to `~/.bashrc`:
@@ -84,7 +105,7 @@ unifi-backup
 unifi-restore
 ```
 
-Use `./setup.sh --no-aliases` if you want the files installed without modifying your shell rc file. Use `./setup.sh --force-env` only if you intentionally want to replace the existing env file with `env.example` after creating a timestamped backup.
+Use `./setup.sh --target hermes` for Hermes Agent, `./setup.sh --target openclaw` for OpenClaw, `./setup.sh --no-aliases` if you want files installed without modifying your shell rc file, and `./setup.sh --force-env` only if you intentionally want to replace the existing env file with `env.example` after creating a timestamped backup.
 
 If you do not use OpenClaw, you can still use the helper script and docs. Install the skill folder wherever your agent framework expects tool instructions.
 
@@ -116,18 +137,35 @@ For other agent frameworks, copy the entire `skill/unifi-api` directory into tha
 
 See `AGENTS.md` for detailed agent-framework installation and behavior guidance.
 
+### Hermes Agent Install Notes
+
+Hermes Agent uses `SKILL.md` skills under `~/.hermes/skills/`. The Hermes target installs this package as:
+
+```text
+~/.hermes/skills/unifi-api/
+|-- SKILL.md
+|-- scripts/unifi_api.py
+|-- references/
+`-- agents/openai.yaml
+```
+
+The private credential file is stored separately at:
+
+```text
+~/.hermes/unifi.env
+```
+
+After setup, open a new shell or run `source ~/.bashrc`, then run `unifi-setup`. Start a new Hermes session so it reloads the skill catalog. If Hermes is installed, `hermes doctor` should still pass.
+
 ## Environment File
 
-The private env file lives at:
-
-```bash
-~/.openclaw/unifi.env
-```
+The private env file lives at `~/.openclaw/unifi.env` for OpenClaw or `~/.hermes/unifi.env` for Hermes.
 
 It should be readable only by your user:
 
 ```bash
-chmod 600 ~/.openclaw/unifi.env
+chmod 600 ~/.openclaw/unifi.env  # OpenClaw
+chmod 600 ~/.hermes/unifi.env    # Hermes
 ```
 
 Template:
@@ -274,10 +312,11 @@ Create backup:
 unifi-backup
 ```
 
-Backups are stored under:
+Backups are stored under the selected agent home, for example:
 
 ```bash
-~/.openclaw/unifi-backups/
+~/.openclaw/unifi-backups/   # OpenClaw target
+~/.hermes/unifi-backups/     # Hermes target
 ```
 
 Example:

@@ -54,6 +54,37 @@ Then run your agent framework's skill refresh/check command, for example:
 openclaw skills check --agent <agent-name>
 ```
 
+
+## Hermes Agent Install Path
+
+Hermes Agent supports `SKILL.md` skills under:
+
+```text
+~/.hermes/skills/<skill-name>/
+```
+
+Install this package for Hermes with:
+
+```bash
+./setup.sh --target hermes
+source ~/.bashrc
+unifi-setup
+unifi-status
+hermes doctor
+```
+
+The installer copies:
+
+```text
+skill/unifi-api/ -> ~/.hermes/skills/unifi-api/
+env.example      -> ~/.hermes/unifi.env
+scripts/*        -> ~/.local/bin/
+```
+
+For Hermes, start a fresh session after installation so the skill catalog reloads. The skill should become available by name/description and, in Hermes interfaces that expose skill slash commands, as the `unifi-api` skill.
+
+Hermes references used for this layout: Hermes documents skills as `SKILL.md` files in `~/.hermes/skills/`, and its install diagnostics use `hermes doctor`.
+
 ## Other Agent Frameworks
 
 For non-OpenClaw frameworks:

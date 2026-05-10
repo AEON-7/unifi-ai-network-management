@@ -1,21 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
-OPENCLAW_DIR="${OPENCLAW_DIR:-$HOME/.openclaw}"
-ENV_FILE="$OPENCLAW_DIR/unifi.env"
-DISABLED_FILE="$OPENCLAW_DIR/unifi.env.disabled"
-HELPER="$OPENCLAW_DIR/workspace/skills/unifi-api/scripts/unifi_api.py"
+
+resolve_agent_home() {
+  if [[ -n "${UNIFI_AGENT_HOME:-}" ]]; then printf '%s' "$UNIFI_AGENT_HOME"; return; fi
+  if [[ -n "${OPENCLAW_DIR:-}" ]]; then printf '%s' "$OPENCLAW_DIR"; return; fi
+  if [[ -n "${HERMES_HOME:-}" ]]; then printf '%s' "$HERMES_HOME"; return; fi
+  if [[ -d "$HOME/.hermes/skills/unifi-api" && ! -d "$HOME/.openclaw/workspace/skills/unifi-api" ]]; then
+    printf '%s' "$HOME/.hermes"
+  else
+    printf '%s' "$HOME/.openclaw"
+  fi
+}
+
+resolve_skill_dir() {
+  if [[ -n "${UNIFI_SKILL_DIR:-}" ]]; then printf '%s' "$UNIFI_SKILL_DIR"; return; fi
+  local home="$1"
+  if [[ -f "$home/workspace/skills/unifi-api/scripts/unifi_api.py" ]]; then printf '%s' "$home/workspace/skills/unifi-api"; return; fi
+  if [[ -f "$home/skills/unifi-api/scripts/unifi_api.py" ]]; then printf '%s' "$home/skills/unifi-api"; return; fi
+  printf '%s' "$home/workspace/skills/unifi-api"
+}
+
+AGENT_HOME="$(resolve_agent_home)"
+SKILL_DIR="$(resolve_skill_dir "$AGENT_HOME")"
+ENV_FILE="${UNIFI_ENV_FILE:-$AGENT_HOME/unifi.env}"
+DISABLED_FILE="${UNIFI_DISABLED_ENV_FILE:-$AGENT_HOME/unifi.env.disabled}"
+HELPER="$SKILL_DIR/scripts/unifi_api.py"
 
 if [[ -f "$ENV_FILE" ]]; then
   echo "UniFi API access: ENABLED ($ENV_FILE exists)"
-  python3 "$HELPER" env 2>/dev/null || true
+  if [[ -f "$HELPER" ]]; then
+    UNIFI_ENV_FILE="$ENV_FILE" python3 "$HELPER" env 2>/dev/null || true
+  else
+    echo "Helper not found: $HELPER"
+  fi
 elif [[ -f "$DISABLED_FILE" ]]; then
   echo "UniFi API access: DISABLED ($DISABLED_FILE exists)"
 else
-  echo "UniFi API access: NOT CONFIGURED (no env file found)"
+  echo "UniFi API access: NOT CONFIGURED (no env file found at $ENV_FILE)"
 fi
 
 if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active openclaw-gateway.service >/dev/null 2>&1; then
   echo "OpenClaw gateway: active"
+elif command -v hermes >/dev/null 2>&1; then
+  echo "Hermes CLI: present"
 else
-  echo "OpenClaw gateway: not active or not installed"
+  echo "Agent service: not detected"
 fi
