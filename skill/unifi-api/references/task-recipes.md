@@ -159,10 +159,10 @@ Use this before VLAN, firewall, Wi-Fi, routing, DHCP, DNS, port profile, firmwar
 1. Run:
 
    ```bash
-   unifi-backup
+   unifi-backup-openclaw  # or unifi-backup-hermes for Hermes
    ```
 
-2. Confirm the command prints a timestamped path under `~/.openclaw/unifi-backups/`.
+2. Confirm the command prints a timestamped path under the matching target backup directory, `~/.openclaw/unifi-backups/` or `~/.hermes/unifi-backups/`.
 3. Include that backup path in the change plan and final report.
 4. If backup fails, do not proceed with a major write unless the user explicitly accepts the risk.
 
@@ -173,14 +173,15 @@ Use only when the user explicitly asks to restore or roll back UniFi configurati
 1. List backups newest-first:
 
    ```bash
-   find ~/.openclaw/unifi-backups -maxdepth 1 -type d -name 'backup-*' -printf '%f\n' | sort -r
+   find ~/.openclaw/unifi-backups ~/.hermes/unifi-backups -maxdepth 1 -type d -name 'backup-*' -printf '%p\n' 2>/dev/null | sort -r
    ```
 
 2. If more than one backup exists, ask the user which date/time to restore.
 3. Run dry-run first:
 
    ```bash
-   unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+   unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+   unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS
    ```
 
 4. Summarize update/create/extra-current/error counts.
@@ -188,7 +189,8 @@ Use only when the user explicitly asks to restore or roll back UniFi configurati
 6. Apply only after confirmation:
 
    ```bash
-   unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+   unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+   unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
    ```
 
 7. Use `--delete-extra` only when the user explicitly requests a full rollback and accepts deletion of objects not present in the backup.

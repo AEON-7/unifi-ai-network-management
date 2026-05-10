@@ -93,8 +93,10 @@ The helper prints JSON. Pipe to `jq` for filtering when available.
 The operational backup/restore tools are also part of this skill because they protect major UniFi changes:
 
 ```bash
-unifi-backup    # create a secure timestamped backup before major changes or on demand
-unifi-restore   # choose a restore point and dry-run/apply a restore
+unifi-backup-openclaw    # OpenClaw target: secure timestamped backup
+unifi-restore-openclaw   # OpenClaw target: choose a restore point and dry-run/apply
+unifi-backup-hermes      # Hermes target: secure timestamped backup
+unifi-restore-hermes     # Hermes target: choose a restore point and dry-run/apply
 ```
 
 If aliases are not loaded in the agent shell, use the scripts directly:
@@ -113,7 +115,7 @@ Backup and restore are normal safety operations. Break-glass local access-contro
 3. Load only the reference page needed for the request.
 4. Run `env` to confirm which credentials and base URLs exist. Do not display secret values.
 5. Run a read-only call to find exact IDs and current state.
-6. Before any major write, run `unifi-backup` and wait for a successful timestamped backup path.
+6. Before any major write, run the matching target backup command (`unifi-backup-openclaw` or `unifi-backup-hermes`) and wait for a successful timestamped backup path.
 7. For writes, build a short change plan with the target object, intended endpoint, and rollback.
 8. Execute the smallest possible change.
 9. Verify state after the change.
@@ -123,23 +125,25 @@ Backup and restore are normal safety operations. Break-glass local access-contro
 
 ### On-demand backup
 
-If the user asks to back up the UniFi configuration, run:
+If the user asks to back up the UniFi configuration, run the command matching the active agent target:
 
 ```bash
-unifi-backup
+unifi-backup-openclaw  # OpenClaw
+unifi-backup-hermes    # Hermes
 ```
 
-If aliases are not loaded:
+If target commands are not on `PATH`, use the wrapper path directly:
 
 ```bash
-~/.local/bin/unifi-config-backup
+~/.local/bin/unifi-backup-openclaw  # OpenClaw
+~/.local/bin/unifi-backup-hermes    # Hermes
 ```
 
 Report the created backup path. Do not paste backup contents into chat because backups may contain sensitive network configuration.
 
 ### Backup before major changes
 
-Run `unifi-backup` before changes involving:
+Run the matching backup command (`unifi-backup-openclaw` or `unifi-backup-hermes`) before changes involving:
 
 - VLANs, networks, DHCP, DNS, WAN, routing, firewall, or port forwards
 - SSIDs, Wi-Fi security, guest/captive portal, or RADIUS profiles
@@ -156,19 +160,21 @@ Restore is potentially disruptive. Only start a restore when the user explicitly
 If multiple restore points exist, list them newest-first and ask the user which date/time they want to restore to. Use the folder names as the source of truth:
 
 ```bash
-find ~/.openclaw/unifi-backups -maxdepth 1 -type d -name 'backup-*' -printf '%f\n' | sort -r
+find ~/.openclaw/unifi-backups ~/.hermes/unifi-backups -maxdepth 1 -type d -name 'backup-*' -printf '%p\n' 2>/dev/null | sort -r
 ```
 
-After the user chooses a restore point, run a dry-run first:
+After the user chooses a restore point, run a dry-run first with the command matching the active target:
 
 ```bash
-unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS
 ```
 
-If aliases are not loaded:
+If target commands are not on `PATH`, use the wrapper path directly:
 
 ```bash
-~/.local/bin/unifi-config-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+~/.local/bin/unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+~/.local/bin/unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS
 ```
 
 Summarize the dry-run plan: selected backup, site, collections, objects that would update/create, extra current objects, and any errors. Then ask for explicit confirmation before applying.
@@ -176,7 +182,8 @@ Summarize the dry-run plan: selected backup, site, collections, objects that wou
 Only after explicit confirmation, apply the restore:
 
 ```bash
-unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
 ```
 
 Do not use `--delete-extra` unless the user explicitly asks for a full rollback that deletes current objects not present in the backup. If the user asks for full rollback, explain the risk, run the dry-run with the chosen backup first, and ask for explicit confirmation before using `--delete-extra`.

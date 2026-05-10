@@ -56,8 +56,8 @@ git clone https://github.com/AEON-7/unifi-ai-network-management.git
 cd unifi-ai-network-management
 ./setup.sh --target openclaw
 source ~/.bashrc
-unifi-setup
-unifi-status
+unifi-setup-openclaw
+unifi-status-openclaw
 ```
 
 For Hermes Agent:
@@ -67,8 +67,8 @@ git clone https://github.com/AEON-7/unifi-ai-network-management.git
 cd unifi-ai-network-management
 ./setup.sh --target hermes
 source ~/.bashrc
-unifi-setup
-unifi-status
+unifi-setup-hermes
+unifi-status-hermes
 hermes doctor
 ```
 
@@ -94,18 +94,27 @@ If your shell already had an older `unifi-*` alias block, open a new shell or ru
 ~/.local/bin/unifi-config-restore
 ```
 
-It also adds aliases to `~/.bashrc`:
+It installs explicit target commands into `~/.local/bin` and ensures that directory is on your shell `PATH`:
 
 ```bash
-unifi-status
-unifi-setup
-unifi-off
-unifi-on
-unifi-backup
-unifi-restore
+# OpenClaw target
+unifi-status-openclaw
+unifi-setup-openclaw
+unifi-off-openclaw
+unifi-on-openclaw
+unifi-backup-openclaw
+unifi-restore-openclaw
+
+# Hermes target
+unifi-status-hermes
+unifi-setup-hermes
+unifi-off-hermes
+unifi-on-hermes
+unifi-backup-hermes
+unifi-restore-hermes
 ```
 
-Use `./setup.sh --target hermes` for Hermes Agent, `./setup.sh --target openclaw` for OpenClaw, `./setup.sh --no-aliases` if you want files installed without modifying your shell rc file, and `./setup.sh --force-env` only if you intentionally want to replace the existing env file with `env.example` after creating a timestamped backup.
+Use `./setup.sh --target hermes` for Hermes Agent, `./setup.sh --target openclaw` for OpenClaw, `./setup.sh --no-aliases` if you want files installed without modifying your shell rc/PATH, and `./setup.sh --force-env` only if you intentionally want to replace the existing env file with `env.example` after creating a timestamped backup.
 
 If you do not use OpenClaw or Hermes, you can still use the helper script and docs. Install the skill folder wherever your agent framework expects tool instructions.
 
@@ -156,7 +165,7 @@ The private credential file is stored separately at:
 ~/.hermes/unifi.env
 ```
 
-After setup, open a new shell or run `source ~/.bashrc`, then run `unifi-setup`. Start a new Hermes session so it reloads the skill catalog. If Hermes is installed, `hermes doctor` should still pass.
+After setup, open a new shell or run `source ~/.bashrc`, then run `unifi-setup-hermes`. Start a new Hermes session so it reloads the skill catalog. If Hermes is installed, `hermes doctor` should still pass.
 
 
 This repository intentionally does **not** commit a real `.env` file. The common and safer convention is:
@@ -201,7 +210,8 @@ UNIFI_SITE=default
 Use the interactive setup tool instead of editing by hand:
 
 ```bash
-unifi-setup
+unifi-setup-openclaw  # OpenClaw
+unifi-setup-hermes    # Hermes
 ```
 
 It hides secret input, confirms keys/passwords, backs up the old env file, writes `0600`, and can restart OpenClaw if installed as a user service. Hermes users should start a fresh Hermes session after setup so the skill catalog reloads.
@@ -210,12 +220,12 @@ It hides secret input, confirms keys/passwords, backs up the old env file, write
 
 | Command | Purpose |
 | --- | --- |
-| `unifi-status` | Show local access state and redacted env status. |
-| `unifi-setup` | Interactive setup/update for API keys and controller URLs. |
-| `unifi-off` | Local break-glass disable. Renames `unifi.env` to `unifi.env.disabled` and restarts the gateway if present. |
-| `unifi-on` | Re-enable local UniFi access by restoring `unifi.env`. |
-| `unifi-backup` | Create a secure timestamped config snapshot before major changes. |
-| `unifi-restore` | Choose an available backup newest-first and run a dry-run restore plan. |
+| `unifi-status-openclaw` / `unifi-status-hermes` | Show local access state and redacted env status for a specific target. |
+| `unifi-setup-openclaw` / `unifi-setup-hermes` | Interactive setup/update for API keys and controller URLs for a specific target. |
+| `unifi-off-openclaw` / `unifi-off-hermes` | Local break-glass disable. Renames the target `unifi.env` to `unifi.env.disabled` and restarts the gateway if present. |
+| `unifi-on-openclaw` / `unifi-on-hermes` | Re-enable local UniFi access by restoring the target `unifi.env`. |
+| `unifi-backup-openclaw` / `unifi-backup-hermes` | Create a secure timestamped config snapshot before major changes. |
+| `unifi-restore-openclaw` / `unifi-restore-hermes` | Choose an available backup newest-first and run a dry-run restore plan. |
 
 Setup/status/break-glass commands are for the owner/operator. Backup and restore are included in the AI skill because they are part of safe change management; restore still requires explicit user selection and confirmation.
 
@@ -224,7 +234,7 @@ Setup/status/break-glass commands are for the owner/operator. Backup and restore
 If a key may be compromised or you want to immediately stop the agent from using UniFi:
 
 ```bash
-unifi-off
+unifi-off-openclaw
 ```
 
 This is a local kill switch. It does not revoke the real key in UniFi.
@@ -241,9 +251,9 @@ Then revoke the key in the UniFi UI:
 After issuing a new key:
 
 ```bash
-unifi-setup
-unifi-on
-unifi-status
+unifi-setup-openclaw
+unifi-on-openclaw
+unifi-status-openclaw
 ```
 
 ## Getting a Local API Key on UDM Pro
@@ -262,16 +272,17 @@ Use the local Network API key for device/client/site operations on your own cons
 5. Open **Control Plane**.
 6. Open **Integrations**.
 7. Generate/create an API key.
-8. Copy it once and store it with:
+8. Copy it once and store it with the setup alias for your target:
 
    ```bash
-   unifi-setup
+   unifi-setup-openclaw  # OpenClaw
+   unifi-setup-hermes    # Hermes
    ```
 
 9. Verify:
 
    ```bash
-   unifi-status
+   unifi-status-openclaw
    # OpenClaw
    python3 ~/.openclaw/workspace/skills/unifi-api/scripts/unifi_api.py network-get /sites
 
@@ -301,7 +312,7 @@ Minimum safety baseline:
 2. Prefer read-only or least-privilege access when UniFi exposes it.
 3. Keep write-capable keys out of chat history.
 4. Store keys only in the selected private env file, `~/.openclaw/unifi.env` for OpenClaw or `~/.hermes/unifi.env` for Hermes, with mode `0600`.
-5. Use `unifi-backup` before major changes.
+5. Use `unifi-backup-openclaw` or `unifi-backup-hermes` before major changes, matching the agent target.
 6. Use official APIs before legacy private endpoints.
 7. Require exact object verification before writes: site, name, MAC/IP/model/id.
 8. Avoid changes that could sever the current management path unless you have a rollback path.
@@ -323,7 +334,8 @@ Never paste API keys, cookies, CSRF tokens, passwords, restore logs, or full raw
 Create backup:
 
 ```bash
-unifi-backup
+unifi-backup-openclaw  # OpenClaw
+unifi-backup-hermes    # Hermes
 ```
 
 Backups are stored under the selected agent home, for example:
@@ -344,20 +356,22 @@ Backups use `0700` directories and `0600` files. They may contain sensitive netw
 Dry-run restore:
 
 ```bash
-unifi-restore
+unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS
+unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS
 ```
 
-Apply restore:
+Apply restore after explicit confirmation:
 
 ```bash
-unifi-restore --apply
+unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply
+unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS --apply
 ```
 
 For non-interactive agent execution after explicit user confirmation, the same confirmation phrase can be supplied as a flag:
 
 ```bash
-unifi-restore --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'   # OpenClaw
-unifi-restore --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'     # Hermes
+unifi-restore-openclaw --backup ~/.openclaw/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
+unifi-restore-hermes --backup ~/.hermes/unifi-backups/backup-YYYYMMDD-HHMMSS --apply --confirm 'RESTORE UNIFI CONFIG'
 ```
 
 The restore tool requires this exact confirmation phrase before applying:
@@ -369,7 +383,8 @@ RESTORE UNIFI CONFIG
 It will not delete current objects that are absent from the backup unless explicitly requested:
 
 ```bash
-unifi-restore --apply --delete-extra
+unifi-restore-openclaw --apply --delete-extra
+unifi-restore-hermes --apply --delete-extra
 ```
 
 Use `--delete-extra` only for intentional rollback to an older full state.

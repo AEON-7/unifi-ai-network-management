@@ -68,8 +68,8 @@ Install this package for Hermes with:
 ```bash
 ./setup.sh --target hermes
 source ~/.bashrc
-unifi-setup
-unifi-status
+unifi-setup-openclaw
+unifi-status-openclaw
 hermes doctor
 ```
 
@@ -121,20 +121,25 @@ Use `env.example` as the template. The repository should not contain a committed
 
 ## Operational Commands And Agent Boundaries
 
-The repository installs aliases such as:
+The repository installs explicit target commands such as:
 
 ```bash
-unifi-setup
-unifi-status
-unifi-off
-unifi-on
-unifi-backup
-unifi-restore
+# OpenClaw
+unifi-setup-openclaw
+unifi-status-openclaw
+unifi-backup-openclaw
+unifi-restore-openclaw
+
+# Hermes
+unifi-setup-hermes
+unifi-status-hermes
+unifi-backup-hermes
+unifi-restore-hermes
 ```
 
-`unifi-setup`, `unifi-status`, and break-glass local access-control commands are owner/operator commands.
+`unifi-setup-openclaw`, `unifi-setup-hermes`, the matching status aliases, and break-glass local access-control commands are owner/operator commands.
 
-`unifi-backup` and `unifi-restore` are part of safe network change management and are included in `SKILL.md`. Agents may run backups on demand or before major changes. Agents may run restore dry-runs after the user asks for rollback. Agents must ask which backup date/time to use when multiple restore points exist, summarize the dry-run, and apply only after explicit user confirmation.
+The matching backup and restore commands are part of safe network change management and are included in `SKILL.md`. Agents may run backups on demand or before major changes. Agents may run restore dry-runs after the user asks for rollback. Agents must ask which backup date/time to use when multiple restore points exist, summarize the dry-run, and apply only after explicit user confirmation.
 
 ## Agent Behavior Contract
 
@@ -144,7 +149,7 @@ A safe UniFi agent should:
 2. Prefer official APIs over legacy private endpoints.
 3. Use exact object identity before writes: site, name, MAC/IP/model/id.
 4. Avoid broad changes based on vague requests.
-5. Run `unifi-backup` before major changes and report the backup path.
+5. Run the matching backup command (`unifi-backup-openclaw` or `unifi-backup-hermes`) before major changes and report the backup path.
 6. For restore requests, list backup date/time folders and ask which restore point to use when multiple exist.
 7. Run restore dry-run first, then apply only after explicit confirmation.
 8. Explain intended endpoint/action before high-impact writes.
