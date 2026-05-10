@@ -90,6 +90,16 @@ def redacted(value: Optional[str]) -> str:
     return f"present:{value[:3]}...{value[-3:]}"
 
 
+def unique_paths(paths: Iterable[str]) -> list[str]:
+    seen = set()
+    result = []
+    for path in paths:
+        if path not in seen:
+            seen.add(path)
+            result.append(path)
+    return result
+
+
 def json_print(obj: Any) -> None:
     print(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False))
 
@@ -235,7 +245,7 @@ def make_legacy_client() -> UniFiClient:
 
 def command_env(_args: argparse.Namespace) -> None:
     data = {
-        "env_files_checked": (
+        "env_files_checked": unique_paths(
             ([os.environ["UNIFI_ENV_FILE"]] if os.environ.get("UNIFI_ENV_FILE") else [])
             + [
                 str(Path.home() / ".openclaw" / "unifi.env"),

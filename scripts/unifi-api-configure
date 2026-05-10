@@ -86,7 +86,7 @@ restart_gateway() {
 }
 
 say "UniFi API env configurator"
-say "This writes $OPENCLAW_DIR/unifi.env. Secrets will not echo."
+say "This writes $ENV_FILE. Secrets will not echo."
 say ""
 
 TARGET="$ENV_FILE"
@@ -166,6 +166,8 @@ write_line "UNIFI_USERNAME" "$legacy_user"
 write_line "UNIFI_PASSWORD" "$legacy_pass"
 write_line "UNIFI_SITE" "$legacy_site"
 
+mkdir -p "$(dirname "$TARGET")"
+chmod 700 "$(dirname "$TARGET")" 2>/dev/null || true
 install -m 600 "$TARGET_TMP" "$TARGET"
 say ""
 say "Wrote $TARGET with 0600 permissions."
